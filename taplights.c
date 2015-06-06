@@ -1,3 +1,8 @@
+// PLAYER 1 Fully Works with correct timing
+// Life Implemented, game ends when life==0;
+//
+//
+
 #include <avr/io.h>
 #include "C:\Users\Paulo\Documents\Atmel Studio\io.c"
 #include "C:\Users\Paulo\Documents\Atmel Studio\io.h"
@@ -6,8 +11,11 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <avr/eeprom.h>
 
 // GLOBAL VARIABLES
+unsigned char LED_counter;
+unsigned char menu_counter;
 unsigned char curr1;
 unsigned char curr2;
 unsigned char curr3;
@@ -16,15 +24,25 @@ unsigned char r1; // Row 1 LED bank
 unsigned char r2; // Row 2 LED bank
 unsigned char r3; // Row 3 LED bank
 unsigned char rowLED = 0; // Current Row to light an LED at
-unsigned long int highScore = 100;
+unsigned long int highScore = 20;
 
 unsigned char gameOver = 0;
 unsigned char onePlayer = 0;
 
+// 1Player Variables
 unsigned char req1 = 0;
 unsigned char ack1 = 0;
 unsigned long int player1Score;
+unsigned char player1Life = 0;
+unsigned char prev1;
+unsigned char prev2;
+unsigned char prev3;
+unsigned char button1;
+unsigned char button2;
+unsigned char button3;
 
+uint16_t SRAMint;
+uint16_t EEMEM NonVolatileInt;
 
 void transmit_data1(unsigned char data);
 void transmit_data2(unsigned char data);
@@ -48,6 +66,9 @@ void Menu_Tick()
 		gameOver = 0;
 		onePlayer = 0;
 		player1Score = 0;
+		r1 = 0x00;
+		r2 = 0x00;
+		r3 = 0x00;
 		transmit_data1(0x00);
 		transmit_data2(0x00);
 		transmit_data3(0x00);
@@ -80,6 +101,7 @@ void Menu_Tick()
 			itoa(player1Score, temp, 10);
 			strcat(HS, temp);
 			LCD_DisplayString(1, HS);
+			//eeprom_write_word((uint16_t*)46,highestScore);
 		}
 		break;
 	}
@@ -87,7 +109,7 @@ void Menu_Tick()
 	{
 		case m_init:
 		menu_state = m_wait;
-		LCD_DisplayString(1, "SHITTY GAME v1.0");
+		LCD_DisplayString(1, "1Pawlo's GAME");
 		break;
 		
 		case m_wait:
@@ -181,7 +203,7 @@ void Menu_Tick()
 		break;
 		
 		case game_over:
-		if( !(PINB & 0x80) || !(PINB & 0x40)  || !(PINB & 0x20) )
+		if( !(PINB & 0x80) && !(PINB & 0x40)  && !(PINB & 0x20) )
 		{
 			req1 = 0;
 			menu_state = m_init;
@@ -197,43 +219,137 @@ void Menu_Tick()
 enum LED_GEN_states {lg_init, outLED, lg_wait} lg_state;
 void LED_GEN_Tick();
 
-enum ONE_PLAYER_states {p1_init, p1_wait, game, p1_wait2} p1_state;
+enum ONE_PLAYER_states {p1_init, p1_wait, game, p1_wait2, held} p1_state;
+void ONE_PLAYER_Tick();
+
+uint16_t EEMEM defaultVal = 0;
+
+int main(void)
+{
+	SRAMint  = eeprom_read_word(&NonVolatileInt);
+	//INITITALIZATIONS
+	// PORTS
+	DDRA = 0xFF; PORTA = 0x00; // Shifters
+	DDRB = 0x0F; PORTB = 0xF0; // Shifters && 4 Buttons
+	DDRC = 0xFF; PORTC = 0x00; // LCD data lines
+	DDRD = 0xCF; PORTD = 0x70; // LCD control lines
+	seed = highScore;
+	srand(seed);
+	// VARIABLES
+	r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
+	LED_counter = 0;
+	menu_counter = 2;
+	TimerSet(100);
+	TimerOn();
+	LCD_init();
+	LCD_ClearScreen();
+	
+	lg_state = lg_init;
+	p1_state = p1_init;
+	menu_state = m_init;
+	
+	while(1)
+	{	// Scheduler code
+		/*
+		if((PINB & 0x10))// Hard RESET
+		{
+			r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
+			LED_counter = 0;
+			menu_counter = 2;
+			lg_state = lg_init;
+			p1_state = p1_init;
+			menu_state = m_init;
+		}*/
+		if(menu_counter==2) Menu_Tick();
+		LED_GEN_Tick();
+		ONE_PLAYER_Tick();
+		if(LED_counter==3) LED_counter = 0; // Reset Counter
+		if(menu_counter==2) menu_counter = 0; // Reset Menu Time
+		LED_counter++;
+		menu_counter++;
+		while(!TimerFlag);
+		TimerFlag = 0;
+	}
+	
+	
+	return 0;
+}
+
 void ONE_PLAYER_Tick()
-{	
+{
 	switch(p1_state) // Transitions
 	{
 		case p1_init:
+		player1Life = 5;
+		prev1 = 0x00; prev2 = 0x00; prev3 = 0x00;
+		button1 = 0x00; button2 = 0x00; button3 = 0x00;
 		p1_state = p1_wait;
 		break;
 		
 		case p1_wait:
-		if(req1) p1_state = game;
+		if(req1){
+			LCD_DisplayString(1, "Life: ");
+			LCD_WriteData(player1Life + '0');
+			p1_state = game;
+		}
 		else{}
 		break;
 		
 		case game:
+		if(player1Life == 0)
+		{
+			ack1 = 1;
+			p1_state = p1_wait2;
+		}
 		//if((curr1 && (PINB & 0x80)) || (curr2 && (PINB & 0x40)) || (curr3 && (PINB & 0x20))) LCD_DisplayString(1, "Missed it Bitch!");
-		//if((curr1 && (PINB & 0x80))) //LCD_DisplayString(1, "Missed row 1!");
-		//if((curr2 && (PINB & 0x40))) //LCD_DisplayString(1, "Missed row 2!");
-		//if((curr3 && (PINB & 0x20))) //LCD_DisplayString(1, "Missed row 3!");
-		
 		if((curr1 && !(PINB & 0x80))){
-			LCD_DisplayString(1, "Got(Row1)!");
 			player1Score++;
+			p1_state = held;
+			button1++;
 		}
 		if((curr2 && !(PINB & 0x40))){
-			LCD_DisplayString(1, "Got(Row2)!");
 			player1Score++;
+			p1_state = held;
+			button2++;
 		}
 		if((curr3 && !(PINB & 0x20))){
-			LCD_DisplayString(1, "Got(Row3)!");
+			//LCD_DisplayString(1, "Got(Row3)!");
 			player1Score++;
+			p1_state = held;
+			button3++;
 		}
 		if(!(PINB & 0x20) && !(PINB & 0x40) && !(PINB & 0x80))
 		{
 			ack1 = 1;
 			p1_state = p1_wait2;
 		}
+		// Missed buttons
+		
+		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
+			LCD_DisplayString(1, "Life: ");
+			if(player1Life > 0) player1Life--;
+			LCD_WriteData('0' + player1Life);
+		}
+		
+		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINB & 0x40) && (button2==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 2!");
+			LCD_DisplayString(1, "Life: ");
+			if(player1Life > 0) player1Life--;
+			LCD_WriteData('0' + player1Life);
+		}
+		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINB & 0x20) && (button3==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 3!");
+			LCD_DisplayString(1, "Life: ");
+			if(player1Life > 0) player1Life--;
+			LCD_WriteData('0' + player1Life);
+		}
+		
+		if(prev1!=curr1 || prev2!=curr2 || prev3!=curr3) // Reset button if it changed
+		{
+			button1 = 0x00;
+			button2 = 0x00;
+			button3 = 0x00;
+		}
+		prev1 = curr1; prev2 = curr2; prev3 = curr3;
+		break;
 
 		case p1_wait2:
 		if (req1==0)
@@ -241,6 +357,16 @@ void ONE_PLAYER_Tick()
 			ack1 = 0;
 			p1_state = p1_init;
 		}
+		break;
+		
+		case held:
+		if(!(PINB & 0x20) || !(PINB & 0x40) || !(PINB & 0x80)) p1_state = held;
+		if(!(PINB & 0x20) && !(PINB & 0x40) && !(PINB & 0x80))
+		{
+			ack1 = 1;
+			p1_state = p1_wait2;
+		}
+		if((PINB & 0x20) && (PINB & 0x40) && (PINB & 0x80)) p1_state = game;
 		break;
 		
 		default:
@@ -260,48 +386,11 @@ void ONE_PLAYER_Tick()
 		
 		case p1_wait2:
 		break;
-	}
-}
-
-int main(void)
-{
-	//INITITALIZATIONS
-	// PORTS
-	DDRA = 0xFF; PORTA = 0x00; // Shifters
-	DDRB = 0x0F; PORTB = 0xF0; // Shifters && 3 Buttons
-	DDRC = 0xFF; PORTC = 0x00; // LCD data lines
-	DDRD = 0xCF; PORTD = 0x70; // LCD control lines
-	srand(seed);
-	// VARIABLES
-	r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
-
-	TimerOn();
-	TimerSet(300);
-	LCD_init();
-	LCD_ClearScreen();
-	
-	lg_state = lg_init;
-	menu_state = m_init;
-	
-	while(1)
-	{	// Scheduler code
-		Menu_Tick();
-		LED_GEN_Tick();
-		ONE_PLAYER_Tick();
 		
-		while(!TimerFlag);
-		TimerFlag = 0;
+		case held:
+		break;
 	}
-	
-	
-	return 0;
 }
-
-/*		//FOR BUTTON PRESS
-		if((curr1 & 0x01) && !(PINB & 0x80)) LCD_DisplayString(1, "ROW1");
-		if((curr2 & 0x01) && !(PINB & 0x40)) LCD_DisplayString(1, "ROW2");
-		if((curr3 & 0x01) && !(PINB & 0x20)) LCD_DisplayString(1, "ROW3");
-*/
 
 void LED_GEN_Tick()
 {
@@ -312,7 +401,7 @@ void LED_GEN_Tick()
 		break;
 		
 		case lg_wait:
-		if (req1)
+		if (req1 && LED_counter==3)
 		{
 			lg_state = outLED;
 		}
@@ -323,6 +412,7 @@ void LED_GEN_Tick()
 		{
 			lg_state = lg_init;
 		}
+		lg_state = lg_wait;
 		break;
 		
 		default:
@@ -376,16 +466,9 @@ void transmit_data2(unsigned char data) {
 void transmit_data3(unsigned char data) {
 	int i;
 	for (i = 0; i < 9 ; ++i) {
-		// Sets SRCLR to 1 allowing data to be set
-		// Also clears SRCLK in preparation of sending data
 		PORTD = 0x04;
-		// set SER = next bit of data to be sent.
 		PORTD |= ((data >> i) & 0x01);
-		// set SRCLK = 1. Rising edge shifts next bit of data into the shift register
 		PORTD |= 0x02;
 	}
-	// se  RCLK = 1. Rising edge copies data from “Shift” register to “Storage” register
-	//PORTD |= 0x02;
-	// clears all lines in preparation of a new transmission
 	PORTD = 0x00;
 }
