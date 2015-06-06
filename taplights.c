@@ -1,7 +1,8 @@
 // PLAYER 1 Fully Works with correct timing
 // Life Implemented, game ends when life==0;
-// EEPROM WORKS.. I think
-// Soft Reset button added
+// EEPROM Supported and working
+// PLAYER 2 Fully Works with correct timing
+//
 
 #include <avr/io.h>
 #include "C:\Users\Paulo\Documents\Atmel Studio\io.c"
@@ -28,6 +29,7 @@ unsigned long int highScore = 20;
 
 unsigned char gameOver = 0;
 unsigned char onePlayer = 0;
+unsigned char twoPlayer = 0;
 
 // 1Player Variables
 unsigned char req1 = 0;
@@ -40,6 +42,23 @@ unsigned char prev3;
 unsigned char button1;
 unsigned char button2;
 unsigned char button3;
+
+// 2Player Variables
+unsigned char req2 = 0;
+unsigned char ack2 = 0;
+unsigned long int player2Score;
+unsigned char player2Life = 0;
+unsigned char buttona;
+unsigned char buttonb;
+unsigned char buttonc;
+unsigned char pquit;
+unsigned char press1;
+unsigned char press2;
+unsigned char press3;
+unsigned char pressa;
+unsigned char pressb;
+unsigned char pressc;
+
 
 void transmit_data1(unsigned char data);
 void transmit_data2(unsigned char data);
@@ -59,6 +78,9 @@ void LED_GEN_Tick();
 
 enum ONE_PLAYER_states {p1_init, p1_wait, game, p1_wait2, held} p1_state;
 void ONE_PLAYER_Tick();
+
+enum TWO_PLAYER_states {p2_init, p2_wait, game2, p2_wait2} p2_state;
+void TWO_PLAYER_Tick();
 
 uint8_t memVal;
 
@@ -88,6 +110,7 @@ int main(void)
 	lg_state = lg_init;
 	p1_state = p1_init;
 	menu_state = m_init;
+	p2_state = p2_init;
 	
 	while(1)
 	{	
@@ -111,10 +134,12 @@ int main(void)
 			lg_state = lg_init;
 			p1_state = p1_init;
 			menu_state = m_init;
+			p2_state = p2_init;
 		}
 		if(menu_counter==2) Menu_Tick();
 		LED_GEN_Tick();
 		ONE_PLAYER_Tick();
+		TWO_PLAYER_Tick();
 		if(LED_counter==3) LED_counter = 0; // Reset Counter
 		if(menu_counter==2) menu_counter = 0; // Reset Menu Time
 		LED_counter++;
@@ -125,6 +150,194 @@ int main(void)
 	
 	
 	return 0;
+}
+
+void TWO_PLAYER_Tick(){
+	switch(p2_state) // Transitions
+	{
+		case p2_init:
+		player1Life = 5; player2Life = 5;
+		player1Score = 0; player2Score = 0;
+		prev1 = 0x00; prev2 = 0x00; prev3 = 0x00;
+		button1 = 0x00; button2 = 0x00; button3 = 0x00;
+		buttona = 0x00; buttonb = 0x00; buttonc = 0x00;
+		press1 = 0;	press2 = 0;	press3 = 0;
+		pressa = 0;	pressb = 0;	pressc = 0;
+		p2_state = p2_wait;
+		break;
+		
+		case p2_wait:
+		if(req2){
+			char lyf[20]="P1: ";
+			char tmp1[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);
+			strcat(lyf, " ~ ");
+			char lyf2[20]="P2: ";
+			char tmp2[20];
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);
+			strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+			p2_state = game2;
+		}
+		else{}
+		break;
+		
+		case game2:
+		if(press1!=0 && (PINB & 0x80)) press1 = 0;
+		if(press2!=0 && (PINB & 0x80)) press2 = 0;
+		if(press3!=0 && (PINB & 0x80)) press3 = 0;
+		if(pressa!=0 && (PINA & 0x80)) pressa = 0;
+		if(pressb!=0 && (PINA & 0x80)) pressb = 0;
+		if(pressc!=0 && (PINA & 0x80)) pressc = 0;
+		if(player1Life == 0 || player2Life==0)
+		{
+			ack1 = 1;
+			p2_state = p2_wait2;
+		}
+		// Player 1
+		if((curr1 && !(PINB & 0x80) && (press1==0))){
+			player1Score++;
+			button1++;
+			press1++;
+		}
+		if((curr2 && !(PINB & 0x40)) && (press2==0)){
+			player1Score++;
+			button2++;
+			press2++;
+		}
+		if((curr3 && !(PINB & 0x20) && (press3==0))){
+			player1Score++;
+			button3++;
+			press3++;
+		}
+		// Player 2
+		if((curr1 && !(PINA & 0x80) && (pressa==0))){
+			player2Score++;
+			buttona++;
+			pressa++;
+		}
+		if((curr2 && !(PINA & 0x40) && (pressb==0))){
+			player2Score++;
+			buttonb++;
+			pressb++;
+		}
+		if((curr3 && !(PINA & 0x20) && (pressc==0))){
+			player2Score++;
+			buttonc++;
+			pressc++;
+		}
+		if( (!(PINB & 0x20) && !(PINB & 0x40) && !(PINB & 0x80)) ||
+		(!(PINA & 0x20) && !(PINA & 0x40) && !(PINA & 0x80)))
+		{
+			ack1 = 1;
+			p2_state = p2_wait2;
+		}
+		// Missed buttons
+		
+		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
+			if(player1Life > 0) player1Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		
+		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINB & 0x40) && (button2==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 2!");
+			if(player1Life > 0) player1Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINB & 0x20) && (button3==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 3!");
+			if(player1Life > 0) player1Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		//===== PLAYER 2 ======
+		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINA & 0x80) && (buttona==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
+			if(player2Life > 0) player2Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		
+		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINA & 0x40) && (buttonb==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 2!");
+			if(player2Life > 0) player2Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINA & 0x20) && (buttonc==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 3!");
+			if(player2Life > 0) player2Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		
+		if(prev1!=curr1 || prev2!=curr2 || prev3!=curr3) // Reset button if it changed
+		{
+			button1 = 0x00;
+			button2 = 0x00;
+			button3 = 0x00;
+			buttona = 0x00;
+			buttonb = 0x00;
+			buttonc = 0x00;
+		}
+		prev1 = curr1; prev2 = curr2; prev3 = curr3;
+		break;
+
+		case p2_wait2:
+		if (req2==0)
+		{
+			ack1 = 0;
+			p2_state = p2_init;
+		}
+		break;
+		
+		default:
+		p2_state = p2_init;
+	}
+	
+	switch(p2_state) // Actions
+	{
+		case p2_init:
+		break;
+		
+		case p2_wait:
+		break;
+		
+		case game2:
+		break;
+		
+		case p2_wait2:
+		break;
+	}
 }
 
 void Menu_Tick()
@@ -138,6 +351,11 @@ void Menu_Tick()
 		gameOver = 0;
 		onePlayer = 0;
 		player1Score = 0;
+		req2 = 0;
+		//ack2 = 0;
+		twoPlayer = 0;
+		player2Score = 0;
+		pquit = 0;	
 		r1 = 0x00;
 		r2 = 0x00;
 		r3 = 0x00;
@@ -177,13 +395,40 @@ void Menu_Tick()
 			strcat(HS, temp);
 			LCD_DisplayString(1, HS);
 		}
+		if(twoPlayer)
+		{
+			if(player1Score > player2Score)
+			{
+				char HS[20] = "Player1 Wins: ";
+				char temp[10];
+				itoa(player1Score, temp, 10);
+				strcat(HS, temp);
+				LCD_DisplayString(1, HS);	
+			}
+			else if(player1Score < player2Score)
+			{
+				char HS[20] = "Player2 Wins: ";
+				char temp[10];
+				itoa(player2Score, temp, 10);
+				strcat(HS, temp);
+				LCD_DisplayString(1, HS);
+			}
+			else
+			{
+				char HS[20] = "Tie!: ";
+				char temp[10];
+				itoa(player2Score, temp, 10);
+				strcat(HS, temp);
+				LCD_DisplayString(1, HS);
+			}
+		}
 		break;
 	}
 	switch(menu_state) // Transitions
 	{
 		case m_init:
 		menu_state = m_wait;
-		LCD_DisplayString(1, "Shitty Game v1.3");
+		LCD_DisplayString(1, "Shitty Game v1.4");
 		break;
 		
 		case m_wait:
@@ -243,7 +488,7 @@ void Menu_Tick()
 		case m1p_game:
 		if( !(PINB & 0x80) && !(PINB & 0x40)  && !(PINB & 0x20) )
 		{
-			LCD_DisplayString(1, "Quitting");
+			//LCD_DisplayString(1, "Quitting");
 			req1 = 0;
 			menu_state = game_over;
 		}
@@ -269,17 +514,43 @@ void Menu_Tick()
 			LCD_DisplayString(1, HS);
 			menu_state = mhs;
 		}
-		// M2PGAME SUPP
+		if(!(PINB & 0x40))
+		{
+			LCD_DisplayString(1, "2 Player Game!");
+			req2 = 1;
+			twoPlayer = 1;
+			menu_state = m2p_game;
+		}
 		else {}
 		break;
 		
 		case m2p_game:
+		if( !(PINB & 0x80) && !(PINB & 0x40)  && !(PINB & 0x20) )
+		{
+			//LCD_DisplayString(1, "Player 1 Quitting");
+			pquit = 1;
+			req2 = 0;
+			menu_state = game_over;
+		}
+		if( !(PINA & 0x80) && !(PINA & 0x40)  && !(PINA & 0x20) )
+		{
+			//LCD_DisplayString(1, "Player 2 Quitting");
+			pquit = 2;
+			req2 = 0;
+			menu_state = game_over;
+		}
+		if(ack1 == 1)
+		{
+			menu_state = game_over;
+		}
+		else{}
 		break;
 		
 		case game_over:
-		if( !(PINB & 0x80) && !(PINB & 0x40)  && !(PINB & 0x20) )
+		if( (!(PINB & 0x80) && !(PINB & 0x40)  && !(PINB & 0x20)) || (!(PINA & 0x80) && !(PINA & 0x40)  && !(PINA & 0x20)) )
 		{
 			req1 = 0;
+			req2 = 0;
 			menu_state = m_init;
 		}
 		break;
@@ -416,14 +687,14 @@ void LED_GEN_Tick()
 		break;
 		
 		case lg_wait:
-		if (req1 && LED_counter==3)
+		if ((req1 || req2) && LED_counter==3)
 		{
 			lg_state = outLED;
 		}
 		break;
 		
 		case outLED:
-		if(ack1==0 && req1==0)
+		if(ack1==0 && (req1==0 && req2 ==0))
 		{
 			lg_state = lg_init;
 		}
@@ -460,12 +731,15 @@ void LED_GEN_Tick()
 
 void transmit_data1(unsigned char data) {
 	int i;
+	unsigned char tmp = PINA & 0xF0;
+	tmp = tmp | 0x04;
 	for (i = 0; i < 9 ; ++i) {
-		PORTA = 0x04;
+		PORTA = tmp;//PORTA = 0x04;
 		PORTA |= ((data >> i) & 0x01);
 		PORTA |= 0x02;
 	}
-	PORTA = 0x00;
+	tmp = tmp & 0xF0;
+	PORTA = tmp;
 }
 
 void transmit_data2(unsigned char data) {
@@ -473,7 +747,7 @@ void transmit_data2(unsigned char data) {
 	unsigned char tmp = PINB & 0xF0;
 	tmp = tmp | 0x04;
 	for (i = 0; i < 9 ; ++i) {
-		PORTB = tmp; // PORTB = 0x04;
+		PORTB = tmp;//PORTB = 0x04; 
 		PORTB |= ((data >> i) & 0x01);
 		PORTB |= 0x02;
 	}
