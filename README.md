@@ -25,6 +25,15 @@ Every correct presses increments the player’s score.
 When the life available (regardless of which player) runs out the game ends and the points are compared to highest score.
 This is saved to EEPROM if in 1 player mode and congratulates the winning player who had a higher score when in 2 player mode.
 
+### Setup
+https://cloud.githubusercontent.com/assets/6341487/8017651/047cbc92-0bb1-11e5-82fe-0c4553fb8650.jpg
+
+https://cloud.githubusercontent.com/assets/6341487/8017652/047ea78c-0bb1-11e5-81bd-6c1cc732b62d.JPG
+
+https://cloud.githubusercontent.com/assets/6341487/8017650/047b51fe-0bb1-11e5-8b46-42e506be4468.JPG
+
+https://cloud.githubusercontent.com/assets/6341487/8017649/0477b06c-0bb1-11e5-8ea2-9aac7bf922c7.JPG
+
 
 #### SOURCE FILES: 
 * taplights.c
