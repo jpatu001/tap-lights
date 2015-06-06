@@ -1,7 +1,7 @@
-// One Player mode fully supported with proper timing.
-// Two Player Mode still not working, might scratch the whole idea
-// EEPROM 100% supported. Saves higher score.
-// One more Build Upon To Go.
+// PLAYER 1 Fully Works with correct timing
+// Life Implemented, game ends when life==0;
+// EEPROM WORKS.. I think
+// Soft Reset button added
 
 #include <avr/io.h>
 #include "C:\Users\Paulo\Documents\Atmel Studio\io.c"
@@ -24,7 +24,7 @@ unsigned char r1; // Row 1 LED bank
 unsigned char r2; // Row 2 LED bank
 unsigned char r3; // Row 3 LED bank
 unsigned char rowLED = 0; // Current Row to light an LED at
-unsigned char highScore;
+unsigned long int highScore = 20;
 
 unsigned char gameOver = 0;
 unsigned char onePlayer = 0;
@@ -32,7 +32,7 @@ unsigned char onePlayer = 0;
 // 1Player Variables
 unsigned char req1 = 0;
 unsigned char ack1 = 0;
-unsigned char player1Score;
+unsigned long int player1Score;
 unsigned char player1Life = 0;
 unsigned char prev1;
 unsigned char prev2;
@@ -53,8 +53,10 @@ void transmit_data3(unsigned char data);
 
 enum menu_states {m_init, m_wait, m1p, m1p_game, m2p, m2p_game, mhs, game_over}menu_state;
 void Menu_Tick();
+
 enum LED_GEN_states {lg_init, outLED, lg_wait} lg_state;
 void LED_GEN_Tick();
+
 enum ONE_PLAYER_states {p1_init, p1_wait, game, p1_wait2, held} p1_state;
 void ONE_PLAYER_Tick();
 
@@ -62,15 +64,16 @@ uint8_t memVal;
 
 int main(void)
 {
+	//eeprom_write_byte(( uint8_t *) 46, 0x01); // Sets Default High Score to 1;
 	memVal = eeprom_read_byte (( uint8_t *) 46);
 	highScore = memVal;
-
+	
 	//INITITALIZATIONS
 	// PORTS
 	DDRA = 0x0F; PORTA = 0xF0; // Shifters
 	DDRB = 0x0F; PORTB = 0xF0; // Shifters && 4 Buttons
 	DDRC = 0xFF; PORTC = 0x00; // LCD data lines
-	DDRD = 0xFF; PORTD = 0x00; // LCD control lines
+	DDRD = 0xCF; PORTD = 0x70; // LCD control lines
 	seed = highScore;
 	srand(seed);
 	// VARIABLES
@@ -87,7 +90,28 @@ int main(void)
 	menu_state = m_init;
 	
 	while(1)
-	{
+	{	
+		if(!(PINB & 0x10)) // Soft Reset
+		{
+			memVal = eeprom_read_byte (( uint8_t *) 46);
+			highScore = memVal;
+			
+			//INITITALIZATIONS
+			// PORTS
+			DDRA = 0x0F; PORTA = 0xF0; // Shifters
+			DDRB = 0x0F; PORTB = 0xF0; // Shifters && 4 Buttons
+			DDRC = 0xFF; PORTC = 0x00; // LCD data lines
+			DDRD = 0xCF; PORTD = 0x70; // LCD control lines
+			seed = highScore;
+			srand(seed);
+			// VARIABLES
+			r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
+			LED_counter = 0;
+			menu_counter = 2;
+			lg_state = lg_init;
+			p1_state = p1_init;
+			menu_state = m_init;
+		}
 		if(menu_counter==2) Menu_Tick();
 		LED_GEN_Tick();
 		ONE_PLAYER_Tick();
@@ -98,6 +122,8 @@ int main(void)
 		while(!TimerFlag);
 		TimerFlag = 0;
 	}
+	
+	
 	return 0;
 }
 
@@ -157,7 +183,7 @@ void Menu_Tick()
 	{
 		case m_init:
 		menu_state = m_wait;
-		LCD_DisplayString(1, "1Pawlo's GAME");
+		LCD_DisplayString(1, "Shitty Game v1.3");
 		break;
 		
 		case m_wait:
@@ -173,7 +199,7 @@ void Menu_Tick()
 			LCD_DisplayString(1, "1 Player Mode");
 			menu_state = m1p;
 		}
-		else {}
+		else menu_state = m_wait;
 		break;
 		
 		case mhs:
@@ -291,7 +317,7 @@ void ONE_PLAYER_Tick()
 			ack1 = 1;
 			p1_state = p1_wait2;
 		}
-
+		
 		if((curr1 && !(PINB & 0x80))){
 			player1Score++;
 			p1_state = held;
@@ -313,6 +339,7 @@ void ONE_PLAYER_Tick()
 			p1_state = p1_wait2;
 		}
 		// Missed buttons
+		
 		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
 			LCD_DisplayString(1, "Life: ");
 			if(player1Life > 0) player1Life--;
@@ -433,27 +460,25 @@ void LED_GEN_Tick()
 
 void transmit_data1(unsigned char data) {
 	int i;
-	unsigned char tmp;
 	for (i = 0; i < 9 ; ++i) {
-		tmp = PORTA & 0xF0;
-		tmp = tmp | 0x04;
-		PORTA = tmp;
+		PORTA = 0x04;
 		PORTA |= ((data >> i) & 0x01);
 		PORTA |= 0x02;
 	}
-	tmp = PORTA;
-	tmp = tmp & 0xF0;
 	PORTA = 0x00;
 }
 
 void transmit_data2(unsigned char data) {
 	int i;
+	unsigned char tmp = PINB & 0xF0;
+	tmp = tmp | 0x04;
 	for (i = 0; i < 9 ; ++i) {
-		PORTB = 0x04;
+		PORTB = tmp; // PORTB = 0x04;
 		PORTB |= ((data >> i) & 0x01);
 		PORTB |= 0x02;
 	}
-	PORTB = 0x00;
+	tmp = tmp & 0xF0;
+	PORTB = tmp;
 }
 
 void transmit_data3(unsigned char data) {
