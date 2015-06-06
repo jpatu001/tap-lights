@@ -1,7 +1,7 @@
-// PLAYER 1 Fully Works with correct timing
-// Life Implemented, game ends when life==0;
-//
-//
+// One Player mode fully supported with proper timing.
+// Two Player Mode still not working, might scratch the whole idea
+// EEPROM 100% supported. Saves higher score.
+// One more Build Upon To Go.
 
 #include <avr/io.h>
 #include "C:\Users\Paulo\Documents\Atmel Studio\io.c"
@@ -24,7 +24,7 @@ unsigned char r1; // Row 1 LED bank
 unsigned char r2; // Row 2 LED bank
 unsigned char r3; // Row 3 LED bank
 unsigned char rowLED = 0; // Current Row to light an LED at
-unsigned long int highScore = 20;
+unsigned char highScore;
 
 unsigned char gameOver = 0;
 unsigned char onePlayer = 0;
@@ -32,7 +32,7 @@ unsigned char onePlayer = 0;
 // 1Player Variables
 unsigned char req1 = 0;
 unsigned char ack1 = 0;
-unsigned long int player1Score;
+unsigned char player1Score;
 unsigned char player1Life = 0;
 unsigned char prev1;
 unsigned char prev2;
@@ -40,9 +40,6 @@ unsigned char prev3;
 unsigned char button1;
 unsigned char button2;
 unsigned char button3;
-
-uint16_t SRAMint;
-uint16_t EEMEM NonVolatileInt;
 
 void transmit_data1(unsigned char data);
 void transmit_data2(unsigned char data);
@@ -55,6 +52,55 @@ void transmit_data3(unsigned char data);
 */
 
 enum menu_states {m_init, m_wait, m1p, m1p_game, m2p, m2p_game, mhs, game_over}menu_state;
+void Menu_Tick();
+enum LED_GEN_states {lg_init, outLED, lg_wait} lg_state;
+void LED_GEN_Tick();
+enum ONE_PLAYER_states {p1_init, p1_wait, game, p1_wait2, held} p1_state;
+void ONE_PLAYER_Tick();
+
+uint8_t memVal;
+
+int main(void)
+{
+	memVal = eeprom_read_byte (( uint8_t *) 46);
+	highScore = memVal;
+
+	//INITITALIZATIONS
+	// PORTS
+	DDRA = 0x0F; PORTA = 0xF0; // Shifters
+	DDRB = 0x0F; PORTB = 0xF0; // Shifters && 4 Buttons
+	DDRC = 0xFF; PORTC = 0x00; // LCD data lines
+	DDRD = 0xFF; PORTD = 0x00; // LCD control lines
+	seed = highScore;
+	srand(seed);
+	// VARIABLES
+	r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
+	LED_counter = 0;
+	menu_counter = 2;
+	TimerSet(100);
+	TimerOn();
+	LCD_init();
+	LCD_ClearScreen();
+	
+	lg_state = lg_init;
+	p1_state = p1_init;
+	menu_state = m_init;
+	
+	while(1)
+	{
+		if(menu_counter==2) Menu_Tick();
+		LED_GEN_Tick();
+		ONE_PLAYER_Tick();
+		if(LED_counter==3) LED_counter = 0; // Reset Counter
+		if(menu_counter==2) menu_counter = 0; // Reset Menu Time
+		LED_counter++;
+		menu_counter++;
+		while(!TimerFlag);
+		TimerFlag = 0;
+	}
+	return 0;
+}
+
 void Menu_Tick()
 {
 	switch(menu_state) // Actions
@@ -95,13 +141,15 @@ void Menu_Tick()
 		case game_over:
 		if(onePlayer)
 		{
-			if(player1Score > highScore) highScore = player1Score;
+			if(player1Score > highScore){
+				highScore = memVal = player1Score;
+				eeprom_update_byte (( uint8_t *) 46 , memVal);
+			}
 			char HS[20] = "Score: ";
 			char temp[10];
 			itoa(player1Score, temp, 10);
 			strcat(HS, temp);
 			LCD_DisplayString(1, HS);
-			//eeprom_write_word((uint16_t*)46,highestScore);
 		}
 		break;
 	}
@@ -125,7 +173,7 @@ void Menu_Tick()
 			LCD_DisplayString(1, "1 Player Mode");
 			menu_state = m1p;
 		}
-		else menu_state = m_wait;
+		else {}
 		break;
 		
 		case mhs:
@@ -216,64 +264,6 @@ void Menu_Tick()
 		
 	}
 }
-enum LED_GEN_states {lg_init, outLED, lg_wait} lg_state;
-void LED_GEN_Tick();
-
-enum ONE_PLAYER_states {p1_init, p1_wait, game, p1_wait2, held} p1_state;
-void ONE_PLAYER_Tick();
-
-uint16_t EEMEM defaultVal = 0;
-
-int main(void)
-{
-	SRAMint  = eeprom_read_word(&NonVolatileInt);
-	//INITITALIZATIONS
-	// PORTS
-	DDRA = 0xFF; PORTA = 0x00; // Shifters
-	DDRB = 0x0F; PORTB = 0xF0; // Shifters && 4 Buttons
-	DDRC = 0xFF; PORTC = 0x00; // LCD data lines
-	DDRD = 0xCF; PORTD = 0x70; // LCD control lines
-	seed = highScore;
-	srand(seed);
-	// VARIABLES
-	r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
-	LED_counter = 0;
-	menu_counter = 2;
-	TimerSet(100);
-	TimerOn();
-	LCD_init();
-	LCD_ClearScreen();
-	
-	lg_state = lg_init;
-	p1_state = p1_init;
-	menu_state = m_init;
-	
-	while(1)
-	{	// Scheduler code
-		/*
-		if((PINB & 0x10))// Hard RESET
-		{
-			r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
-			LED_counter = 0;
-			menu_counter = 2;
-			lg_state = lg_init;
-			p1_state = p1_init;
-			menu_state = m_init;
-		}*/
-		if(menu_counter==2) Menu_Tick();
-		LED_GEN_Tick();
-		ONE_PLAYER_Tick();
-		if(LED_counter==3) LED_counter = 0; // Reset Counter
-		if(menu_counter==2) menu_counter = 0; // Reset Menu Time
-		LED_counter++;
-		menu_counter++;
-		while(!TimerFlag);
-		TimerFlag = 0;
-	}
-	
-	
-	return 0;
-}
 
 void ONE_PLAYER_Tick()
 {
@@ -301,7 +291,7 @@ void ONE_PLAYER_Tick()
 			ack1 = 1;
 			p1_state = p1_wait2;
 		}
-		//if((curr1 && (PINB & 0x80)) || (curr2 && (PINB & 0x40)) || (curr3 && (PINB & 0x20))) LCD_DisplayString(1, "Missed it Bitch!");
+
 		if((curr1 && !(PINB & 0x80))){
 			player1Score++;
 			p1_state = held;
@@ -313,7 +303,6 @@ void ONE_PLAYER_Tick()
 			button2++;
 		}
 		if((curr3 && !(PINB & 0x20))){
-			//LCD_DisplayString(1, "Got(Row3)!");
 			player1Score++;
 			p1_state = held;
 			button3++;
@@ -324,7 +313,6 @@ void ONE_PLAYER_Tick()
 			p1_state = p1_wait2;
 		}
 		// Missed buttons
-		
 		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
 			LCD_DisplayString(1, "Life: ");
 			if(player1Life > 0) player1Life--;
@@ -445,11 +433,16 @@ void LED_GEN_Tick()
 
 void transmit_data1(unsigned char data) {
 	int i;
+	unsigned char tmp;
 	for (i = 0; i < 9 ; ++i) {
-		PORTA = 0x04;
+		tmp = PORTA & 0xF0;
+		tmp = tmp | 0x04;
+		PORTA = tmp;
 		PORTA |= ((data >> i) & 0x01);
 		PORTA |= 0x02;
 	}
+	tmp = PORTA;
+	tmp = tmp & 0xF0;
 	PORTA = 0x00;
 }
 
