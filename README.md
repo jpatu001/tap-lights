@@ -26,7 +26,7 @@ When the life available (regardless of which player) runs out the game ends and 
 This is saved to EEPROM if in 1 player mode and congratulates the winning player who had a higher score when in 2 player mode.
 
 
-SOURCE FILES: 
+#### SOURCE FILES: 
 * taplights.c
 * io.c
 * io.h
@@ -35,7 +35,7 @@ NOTE: “final_project_1.5.c” holds all the code used for the final demonstrat
 The rest of the files are just supporting libraries(that I do not own).
 
 
-REFERENCES: 
+#### REFERENCES: 
 * CS120B Lab Materials
 * IEEE
 * and http://www.societyofrobots.com/member_tutorials/book/export/html/309 for EEPROM.
