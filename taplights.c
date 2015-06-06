@@ -1,8 +1,9 @@
-// PLAYER 1 Fully Works with correct timing
+// FINAL
+// Player 1 & 2 Fully Works with correct timing
 // Life Implemented, game ends when life==0;
-// EEPROM Supported and working
-// PLAYER 2 Fully Works with correct timing
-//
+// EEPROM saves highest score
+// Speed control added for 1 player mode only
+// EEPROM high score is only implemented on 1player mode
 
 #include <avr/io.h>
 #include "C:\Users\Paulo\Documents\Atmel Studio\io.c"
@@ -42,6 +43,7 @@ unsigned char prev3;
 unsigned char button1;
 unsigned char button2;
 unsigned char button3;
+unsigned char speed;
 
 // 2Player Variables
 unsigned char req2 = 0;
@@ -58,19 +60,16 @@ unsigned char press3;
 unsigned char pressa;
 unsigned char pressb;
 unsigned char pressc;
-
-
-void transmit_data1(unsigned char data);
-void transmit_data2(unsigned char data);
-void transmit_data3(unsigned char data);
-
 /*		//FOR BUTTON PRESS
 		if(!(PINB & 0x80) //"ROW1"
 		if(!(PINB & 0x40)) //"ROW2"
 		if(!(PINB & 0x20) //"ROW3"
 */
+void transmit_data1(unsigned char data);
+void transmit_data2(unsigned char data);
+void transmit_data3(unsigned char data);
 
-enum menu_states {m_init, m_wait, m1p, m1p_game, m2p, m2p_game, mhs, game_over}menu_state;
+enum menu_states {m_init, m_wait, m1p, m1p_game, m2p, m2p_game, mhs, game_over, speed_change}menu_state;
 void Menu_Tick();
 
 enum LED_GEN_states {lg_init, outLED, lg_wait} lg_state;
@@ -101,6 +100,7 @@ int main(void)
 	// VARIABLES
 	r1 = 0x00;	r2  = 0x00;	r3  = 0x00;	//ROWS
 	LED_counter = 0;
+	speed = 3;
 	menu_counter = 2;
 	TimerSet(100);
 	TimerOn();
@@ -135,12 +135,13 @@ int main(void)
 			p1_state = p1_init;
 			menu_state = m_init;
 			p2_state = p2_init;
+			speed = 3;
 		}
 		if(menu_counter==2) Menu_Tick();
 		LED_GEN_Tick();
 		ONE_PLAYER_Tick();
 		TWO_PLAYER_Tick();
-		if(LED_counter==3) LED_counter = 0; // Reset Counter
+		if(LED_counter==speed) LED_counter = 0; // Reset Counter
 		if(menu_counter==2) menu_counter = 0; // Reset Menu Time
 		LED_counter++;
 		menu_counter++;
@@ -150,194 +151,6 @@ int main(void)
 	
 	
 	return 0;
-}
-
-void TWO_PLAYER_Tick(){
-	switch(p2_state) // Transitions
-	{
-		case p2_init:
-		player1Life = 5; player2Life = 5;
-		player1Score = 0; player2Score = 0;
-		prev1 = 0x00; prev2 = 0x00; prev3 = 0x00;
-		button1 = 0x00; button2 = 0x00; button3 = 0x00;
-		buttona = 0x00; buttonb = 0x00; buttonc = 0x00;
-		press1 = 0;	press2 = 0;	press3 = 0;
-		pressa = 0;	pressb = 0;	pressc = 0;
-		p2_state = p2_wait;
-		break;
-		
-		case p2_wait:
-		if(req2){
-			char lyf[20]="P1: ";
-			char tmp1[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);
-			strcat(lyf, " ~ ");
-			char lyf2[20]="P2: ";
-			char tmp2[20];
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);
-			strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-			p2_state = game2;
-		}
-		else{}
-		break;
-		
-		case game2:
-		if(press1!=0 && (PINB & 0x80)) press1 = 0;
-		if(press2!=0 && (PINB & 0x80)) press2 = 0;
-		if(press3!=0 && (PINB & 0x80)) press3 = 0;
-		if(pressa!=0 && (PINA & 0x80)) pressa = 0;
-		if(pressb!=0 && (PINA & 0x80)) pressb = 0;
-		if(pressc!=0 && (PINA & 0x80)) pressc = 0;
-		if(player1Life == 0 || player2Life==0)
-		{
-			ack1 = 1;
-			p2_state = p2_wait2;
-		}
-		// Player 1
-		if((curr1 && !(PINB & 0x80) && (press1==0))){
-			player1Score++;
-			button1++;
-			press1++;
-		}
-		if((curr2 && !(PINB & 0x40)) && (press2==0)){
-			player1Score++;
-			button2++;
-			press2++;
-		}
-		if((curr3 && !(PINB & 0x20) && (press3==0))){
-			player1Score++;
-			button3++;
-			press3++;
-		}
-		// Player 2
-		if((curr1 && !(PINA & 0x80) && (pressa==0))){
-			player2Score++;
-			buttona++;
-			pressa++;
-		}
-		if((curr2 && !(PINA & 0x40) && (pressb==0))){
-			player2Score++;
-			buttonb++;
-			pressb++;
-		}
-		if((curr3 && !(PINA & 0x20) && (pressc==0))){
-			player2Score++;
-			buttonc++;
-			pressc++;
-		}
-		if( (!(PINB & 0x20) && !(PINB & 0x40) && !(PINB & 0x80)) ||
-		(!(PINA & 0x20) && !(PINA & 0x40) && !(PINA & 0x80)))
-		{
-			ack1 = 1;
-			p2_state = p2_wait2;
-		}
-		// Missed buttons
-		
-		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
-			if(player1Life > 0) player1Life--;
-			char lyf[20]="P1: ";	char tmp1[20];
-			char lyf2[20]="P2: ";	char tmp2[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-		}
-		
-		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINB & 0x40) && (button2==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 2!");
-			if(player1Life > 0) player1Life--;
-			char lyf[20]="P1: ";	char tmp1[20];
-			char lyf2[20]="P2: ";	char tmp2[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-		}
-		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINB & 0x20) && (button3==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 3!");
-			if(player1Life > 0) player1Life--;
-			char lyf[20]="P1: ";	char tmp1[20];
-			char lyf2[20]="P2: ";	char tmp2[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-		}
-		//===== PLAYER 2 ======
-		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINA & 0x80) && (buttona==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
-			if(player2Life > 0) player2Life--;
-			char lyf[20]="P1: ";	char tmp1[20];
-			char lyf2[20]="P2: ";	char tmp2[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-		}
-		
-		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINA & 0x40) && (buttonb==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 2!");
-			if(player2Life > 0) player2Life--;
-			char lyf[20]="P1: ";	char tmp1[20];
-			char lyf2[20]="P2: ";	char tmp2[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-		}
-		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINA & 0x20) && (buttonc==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 3!");
-			if(player2Life > 0) player2Life--;
-			char lyf[20]="P1: ";	char tmp1[20];
-			char lyf2[20]="P2: ";	char tmp2[20];
-			itoa(player1Life, tmp1,10);
-			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
-			itoa(player2Life, tmp2,10);
-			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
-			LCD_DisplayString(1,lyf);
-		}
-		
-		if(prev1!=curr1 || prev2!=curr2 || prev3!=curr3) // Reset button if it changed
-		{
-			button1 = 0x00;
-			button2 = 0x00;
-			button3 = 0x00;
-			buttona = 0x00;
-			buttonb = 0x00;
-			buttonc = 0x00;
-		}
-		prev1 = curr1; prev2 = curr2; prev3 = curr3;
-		break;
-
-		case p2_wait2:
-		if (req2==0)
-		{
-			ack1 = 0;
-			p2_state = p2_init;
-		}
-		break;
-		
-		default:
-		p2_state = p2_init;
-	}
-	
-	switch(p2_state) // Actions
-	{
-		case p2_init:
-		break;
-		
-		case p2_wait:
-		break;
-		
-		case game2:
-		break;
-		
-		case p2_wait2:
-		break;
-	}
 }
 
 void Menu_Tick()
@@ -352,7 +165,6 @@ void Menu_Tick()
 		onePlayer = 0;
 		player1Score = 0;
 		req2 = 0;
-		//ack2 = 0;
 		twoPlayer = 0;
 		player2Score = 0;
 		pquit = 0;	
@@ -423,12 +235,15 @@ void Menu_Tick()
 			}
 		}
 		break;
+		
+		case speed_change:
+		break;
 	}
 	switch(menu_state) // Transitions
 	{
 		case m_init:
 		menu_state = m_wait;
-		LCD_DisplayString(1, "Shitty Game v1.4");
+		LCD_DisplayString(1, "Tap Lights v1.5");
 		break;
 		
 		case m_wait:
@@ -477,18 +292,40 @@ void Menu_Tick()
 		}
 		if(!(PINB & 0x40))
 		{
+			LCD_DisplayString(1, "Speed: ");
+			LCD_Cursor(7);
+			LCD_WriteData(speed + '0');
+			menu_state = speed_change;//menu_state = m1p_game;
+		}
+		else {}
+		break;
+
+		case speed_change:
+		if(!(PINB & 0x80) && speed<6) //"ROW1"
+		{
+			speed++;
+			LCD_Cursor(7);
+			LCD_WriteData(speed + '0');
+		}
+		if(!(PINB & 0x40)) //"ROW3"
+		{
 			LCD_DisplayString(1, "Game!");
 			req1 = 1;
 			onePlayer = 1;
 			menu_state = m1p_game;
 		}
-		else {}
+		if(!(PINB & 0x20) && speed > 2)
+		{
+			speed--;
+			LCD_Cursor(7);
+			LCD_WriteData(speed + '0');//menu_state = m1p_game;
+		}
+		else{}
 		break;
 		
 		case m1p_game:
 		if( !(PINB & 0x80) && !(PINB & 0x40)  && !(PINB & 0x20) )
 		{
-			//LCD_DisplayString(1, "Quitting");
 			req1 = 0;
 			menu_state = game_over;
 		}
@@ -611,18 +448,18 @@ void ONE_PLAYER_Tick()
 		}
 		// Missed buttons
 		
-		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 1!");
+		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 1!");
 			LCD_DisplayString(1, "Life: ");
 			if(player1Life > 0) player1Life--;
 			LCD_WriteData('0' + player1Life);
 		}
 		
-		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINB & 0x40) && (button2==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 2!");
+		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINB & 0x40) && (button2==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 2!");
 			LCD_DisplayString(1, "Life: ");
 			if(player1Life > 0) player1Life--;
 			LCD_WriteData('0' + player1Life);
 		}
-		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINB & 0x20) && (button3==0) && LED_counter>=3){ //LCD_DisplayString(1, "Missed row 3!");
+		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINB & 0x20) && (button3==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 3!");
 			LCD_DisplayString(1, "Life: ");
 			if(player1Life > 0) player1Life--;
 			LCD_WriteData('0' + player1Life);
@@ -678,6 +515,193 @@ void ONE_PLAYER_Tick()
 	}
 }
 
+void TWO_PLAYER_Tick(){
+	switch(p2_state) // Transitions
+	{
+		case p2_init:
+		player1Life = 5; player2Life = 5;
+		player1Score = 0; player2Score = 0;
+		prev1 = 0x00; prev2 = 0x00; prev3 = 0x00;
+		button1 = 0x00; button2 = 0x00; button3 = 0x00;
+		buttona = 0x00; buttonb = 0x00; buttonc = 0x00;
+		press1 = 0;	press2 = 0;	press3 = 0;
+		pressa = 0;	pressb = 0;	pressc = 0;
+		p2_state = p2_wait;
+		break;
+		
+		case p2_wait:
+		if(req2){
+			char lyf[20]="P1: ";
+			char tmp1[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);
+			strcat(lyf, " ~ ");
+			char lyf2[20]="P2: ";
+			char tmp2[20];
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);
+			strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+			p2_state = game2;
+		}
+		else{}
+		break;
+		
+		case game2:
+		if(press1!=0 && (PINB & 0x80)) press1 = 0;
+		if(press2!=0 && (PINB & 0x80)) press2 = 0;
+		if(press3!=0 && (PINB & 0x80)) press3 = 0;
+		if(pressa!=0 && (PINA & 0x80)) pressa = 0;
+		if(pressb!=0 && (PINA & 0x80)) pressb = 0;
+		if(pressc!=0 && (PINA & 0x80)) pressc = 0;
+		if(player1Life == 0 || player2Life==0)
+		{
+			ack1 = 1;
+			p2_state = p2_wait2;
+		}
+		// Player 1
+		if((curr1 && !(PINB & 0x80) && (press1==0))){
+			player1Score++;
+			button1++;
+			press1++;
+		}
+		if((curr2 && !(PINB & 0x40)) && (press2==0)){
+			player1Score++;
+			button2++;
+			press2++;
+		}
+		if((curr3 && !(PINB & 0x20) && (press3==0))){
+			player1Score++;
+			button3++;
+			press3++;
+		}
+		// Player 2
+		if((curr1 && !(PINA & 0x80) && (pressa==0))){
+			player2Score++;
+			buttona++;
+			pressa++;
+		}
+		if((curr2 && !(PINA & 0x40) && (pressb==0))){
+			player2Score++;
+			buttonb++;
+			pressb++;
+		}
+		if((curr3 && !(PINA & 0x20) && (pressc==0))){
+			player2Score++;
+			buttonc++;
+			pressc++;
+		}
+		if( (!(PINB & 0x20) && !(PINB & 0x40) && !(PINB & 0x80)) ||
+		(!(PINA & 0x20) && !(PINA & 0x40) && !(PINA & 0x80)))
+		{
+			ack1 = 1;
+			p2_state = p2_wait2;
+		}
+		// Missed buttons
+		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINB & 0x80) && (button1==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 1!");
+			if(player1Life > 0) player1Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		
+		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINB & 0x40) && (button2==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 2!");
+			if(player1Life > 0) player1Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINB & 0x20) && (button3==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 3!");
+			if(player1Life > 0) player1Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		//===== PLAYER 2 ======
+		if(!(curr1 & 0x01) && (prev1 & 0x01) && (PINA & 0x80) && (buttona==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 1!");
+			if(player2Life > 0) player2Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		
+		if(!(curr2 & 0x01) && (prev2 & 0x01) && (PINA & 0x40) && (buttonb==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 2!");
+			if(player2Life > 0) player2Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		if(!(curr3 & 0x01) && (prev3 & 0x01) && (PINA & 0x20) && (buttonc==0) && LED_counter>=speed){ //LCD_DisplayString(1, "Missed row 3!");
+			if(player2Life > 0) player2Life--;
+			char lyf[20]="P1: ";	char tmp1[20];
+			char lyf2[20]="P2: ";	char tmp2[20];
+			itoa(player1Life, tmp1,10);
+			strcat(lyf,tmp1);	strcat(lyf, " ~ ");
+			itoa(player2Life, tmp2,10);
+			strcat(lyf2,tmp2);	strcat(lyf,lyf2);
+			LCD_DisplayString(1,lyf);
+		}
+		
+		if(prev1!=curr1 || prev2!=curr2 || prev3!=curr3) // Reset button if it changed
+		{
+			button1 = 0x00;
+			button2 = 0x00;
+			button3 = 0x00;
+			buttona = 0x00;
+			buttonb = 0x00;
+			buttonc = 0x00;
+		}
+		prev1 = curr1; prev2 = curr2; prev3 = curr3;
+		break;
+
+		case p2_wait2:
+		if (req2==0)
+		{
+			ack1 = 0;
+			p2_state = p2_init;
+		}
+		break;
+		
+		default:
+		p2_state = p2_init;
+	}
+	
+	switch(p2_state) // Actions
+	{
+		case p2_init:
+		break;
+		
+		case p2_wait:
+		break;
+		
+		case game2:
+		break;
+		
+		case p2_wait2:
+		break;
+	}
+}
+
 void LED_GEN_Tick()
 {
 	switch(lg_state)
@@ -687,7 +711,7 @@ void LED_GEN_Tick()
 		break;
 		
 		case lg_wait:
-		if ((req1 || req2) && LED_counter==3)
+		if ((req1 || req2) && LED_counter==speed)
 		{
 			lg_state = outLED;
 		}
@@ -718,7 +742,7 @@ void LED_GEN_Tick()
 		
 		case outLED:
 		curr1 = (r1 & 0x01);	curr2 = (r2 & 0x01);	curr3 = (r3 &0x01); //Get Current end of register
-		rowLED = rand() % 10;	// RANDOMIZER LED
+		rowLED = rand() % 5;	// RANDOMIZER LED
 		if(rowLED == 0)	r1 |= 0x80;
 		if(rowLED == 2)	r2 |= 0x80;
 		if(rowLED == 3)	r3 |= 0x80;
